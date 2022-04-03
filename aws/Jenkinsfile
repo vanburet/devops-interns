@@ -1,0 +1,47 @@
+
+
+pipeline {
+    options {
+        timestamps()
+        skipDefaultCheckout()
+    }
+    agent {label 'ss-terraform-slave'}
+    parameters {
+        choice(name: 'Action', choices: 'none\napply', description: 'Manual build stages')
+    }
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+    stages {
+        stage('Checkout script') {
+            steps {
+                cleanWs()
+                checkout scm
+            }
+        }
+        stage('terraform Initiation') {
+            steps {
+                sshagent (credentials: []) {
+                    sh 'git config --global url."git@github.com:".insteadOf "https://github.com/"'
+                    sh 'git submodule update --init --recursive; sleep 10s'
+                    sh 'cd aws/; terraform103 init'
+                }
+            }
+        }
+        stage('terraform dryrun') {
+            steps {
+                ansiColor('xterm') {
+                    sh 'cd aws/; terraform103 plan'
+                }
+            }
+        }
+        stage('terraform applying') {
+            when { expression { params.Action == 'apply' } }
+            steps {
+                ansiColor('xterm') {
+                    sh 'cd aws/; terraform103 apply -auto-approve'
+                }
+            }
+        }
+    }
+}
